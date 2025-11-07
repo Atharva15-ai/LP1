@@ -1,0 +1,57 @@
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+quotes     [\"']
+comment1   \/\/.*
+comment2   "/*"([^*]|\*+[^*/])*\*+"/"
+
+%%
+public|private|protected              { printf("%s : is a Access specifier\n", yytext); }
+class|System|out|println|void|main|static
+                                      { printf("%s : is a Keyword\n", yytext); }
+int|double|char|String                { printf("%s : is a DataType\n", yytext); }
+[A-Z][a-zA-Z0-9_]*                   { printf("%s : is a Class-Name\n", yytext); }
+[a-z][a-zA-Z0-9_]*                   { printf("%s : is a Variable\n", yytext); }
+[+\-<>!%&^*?=]+                      { printf("%s : is a Operator\n", yytext); }
+[\[\]{}()]                           { printf("%s : is a Bracket\n", yytext); }
+[,.:;]                               { printf("%s : is a Delimiter\n", yytext); }
+[0-9]+                               { printf("%s : is a Number\n", yytext); }
+{quotes}                             { printf("%s : is a Quote\n", yytext); }
+{comment1}                           { printf("%s : is a Single line Comment\n", yytext); }
+{comment2}                           { printf("%s : is a Multiline Comment\n", yytext); }
+
+[ \t\n]+                             ;   /* Ignore whitespace */
+.                                    { printf("%s : Unknown token\n", yytext); }
+
+%%
+int main(int argc, char **argv)
+{
+    if (argc > 1) {
+        FILE *file = fopen(argv[1], "r");
+        if (!file) {
+            fprintf(stderr, "Could not open %s\n", argv[1]);
+            exit(1);
+        }
+        yyin = file;
+    }
+    yylex();
+    return 0;
+}
+
+int yywrap() { return 1; }
+
+
+
+
+
+public class Hello {
+    int a = 5;
+    double b = 10.5;
+    // This is a comment
+    /* This is
+       a multi-line comment */
+    System.out.println(a);
+}
+
