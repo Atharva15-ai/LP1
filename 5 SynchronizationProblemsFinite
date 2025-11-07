@@ -1,0 +1,166 @@
+package prac5;
+import java.util.concurrent.Semaphore;
+import java.util.LinkedList;
+import java.util.Queue;
+// ===================== Producer-Consumer Problem =====================
+class ProducerConsumer {
+    private final int BUFFER_SIZE = 5;
+    private final Queue<Integer> buffer = new LinkedList<>();
+    private final Semaphore mutex = new Semaphore(1);
+    private final Semaphore full = new Semaphore(0);
+    private final Semaphore empty = new Semaphore(BUFFER_SIZE);
+    private final int TOTAL_OPERATIONS = 10; // Number of items to produce/consume
+    class Producer extends Thread {
+        public void run() {
+            int item = 0;
+            try {
+                for (int i = 0; i < TOTAL_OPERATIONS; i++) {
+                    empty.acquire();
+                    mutex.acquire();
+                    buffer.add(item);
+                    System.out.println("Produced: " + item);
+                    item++;
+                    mutex.release();
+                    full.release();
+                    Thread.sleep(200);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    class Consumer extends Thread {
+        public void run() {try {
+                for (int i = 0; i < TOTAL_OPERATIONS; i++) {
+                    full.acquire();
+                    mutex.acquire();
+                    int item = buffer.poll();
+                    System.out.println("Consumed: " + item);
+                    mutex.release();
+                    empty.release();
+                    Thread.sleep(300);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }  }
+    }
+       public void startSimulation() throws InterruptedException {
+        Thread producer = new Producer();
+        Thread consumer = new Consumer();
+        producer.start();
+        consumer.start();
+        producer.join();
+        consumer.join();
+    }
+}
+// ================ Readers-Writers Problem (Reader Preference   =====================
+class ReadersWriters {
+    private int readCount = 0;
+    private final Semaphore mutex = new Semaphore(1);
+    private final Semaphore wrt = new Semaphore(1);
+    private final int TOTAL_OPERATIONS = 5; // Each reader/writer runs 5 times
+    class Reader extends Thread {
+        private final int id;
+        Reader(int id) { this.id = id; }
+        public void run() {
+            try {for (int i = 0; i < TOTAL_OPERATIONS; i++) {
+                    mutex.acquire();
+                    readCount++;
+                    if (readCount == 1) wrt.acquire();
+                    mutex.release();
+                    System.out.println("Reader " + id + " is reading");
+                    Thread.sleep(200);
+                    mutex.acquire();
+                    readCount--;
+                    if (readCount == 0) wrt.release();
+                    mutex.release();
+                    Thread.sleep(200);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }  }
+    }class Writer extends Thread {
+        private final int id;
+        Writer(int id) { this.id = id; }
+        public void run() {
+            try {for (int i = 0; i < TOTAL_OPERATIONS; i++) {
+                    wrt.acquire();
+                    System.out.println("Writer " + id + " is writing");
+                    Thread.sleep(300);
+                    wrt.release();
+                    Thread.sleep(200);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }}
+    }
+    public void startSimulation() throws InterruptedException {
+        Thread r1 = new Reader(1);
+        Thread r2 = new Reader(2);
+        Thread w1 = new Writer(1);
+        r1.start();
+        r2.start();
+        w1.start();
+        r1.join();
+        r2.join();
+        w1.join();
+    }
+}
+// ===================== Dining Philosophers Problem =====================
+class DiningPhilosophers {
+    private final int NUM_PHILOSOPHERS = 5;
+    private final Semaphore[] chopsticks = new Semaphore[NUM_PHILOSOPHERS];
+    private final int TOTAL_MEALS = 3; // Each philosopher eats 3 times
+    class Philosopher extends Thread {
+        private final int id;
+        Philosopher(int id) { this.id = id; }
+        public void run() {
+            try {
+                for (int i = 0; i < TOTAL_MEALS; i++) {
+                    think();
+                    if (id % 2 == 0) {
+                        chopsticks[id].acquire();
+                        chopsticks[(id + 1) % NUM_PHILOSOPHERS].acquire();
+                    } else {
+                        chopsticks[(id + 1) % NUM_PHILOSOPHERS].acquire();
+                        chopsticks[id].acquire();
+                    }eat();
+                    chopsticks[id].release();
+                    chopsticks[(id + 1) % NUM_PHILOSOPHERS].release();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }private void think() throws InterruptedException {
+            System.out.println("Philosopher " + id + " is thinking");
+            Thread.sleep(100);
+        }private void eat() throws InterruptedException {
+            System.out.println("Philosopher " + id + " is eating");
+            Thread.sleep(200);
+        }
+    }public void startSimulation() throws InterruptedException {
+        for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
+            chopsticks[i] = new Semaphore(1);
+        }
+        Thread[] philosophers = new Thread[NUM_PHILOSOPHERS];
+        for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
+            philosophers[i] = new Philosopher(i);
+            philosophers[i].start();
+        }
+        for (Thread p : philosophers) p.join();
+    }
+}
+// ===================== Main Class =====================
+public class SynchronizationProblemsFinite {
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println("=== Producer-Consumer Simulation ===");
+        new ProducerConsumer().startSimulation();
+        System.out.println("\n=== Readers-Writers Simulation ===");
+        new ReadersWriters().startSimulation();
+
+        System.out.println("\n=== Dining Philosophers Simulation ===");
+        new DiningPhilosophers().startSimulation();
+        System.out.println("\n[Program finished]");
+    }
+}
+
