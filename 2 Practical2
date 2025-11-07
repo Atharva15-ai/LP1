@@ -1,0 +1,247 @@
+package prac2;
+import java.io.*;
+import java.util.*;
+
+public class MacroProcessor {
+
+    static class MNTEntry {
+        int mdtIndex;
+        int paramCount;
+        List<String> params;
+        Map<String, String> defaults;
+
+        MNTEntry(int mdtIndex, List<String> params, Map<String, String> defaults) {
+            this.mdtIndex = mdtIndex;
+            this.paramCount = params.size();
+            this.params = params;
+            this.defaults = defaults;
+        }
+    }
+
+    private final Map<String, MNTEntry> MNT = new LinkedHashMap<>();
+    private final List<String> MDT = new ArrayList<>();
+    private final List<String> intermediateCode = new ArrayList<>();
+
+    // Parse macro header line (e.g., "INCR_D &MEM_VAL, &INCR_VAL=, &REG=AREG")
+    private Object[] parseMacroHeader(String line) {
+        String[] parts = line.trim().split("\\s+");
+        String macroName = parts[0];
+
+        List<String> params = new ArrayList<>();
+        Map<String, String> defaults = new LinkedHashMap<>();
+
+        if (parts.length > 1) {
+            String paramStr = String.join("", Arrays.copyOfRange(parts, 1, parts.length));
+            String[] paramList = paramStr.split(",");
+
+            for (String p : paramList) {
+                p = p.trim();
+                if (p.contains("=")) {
+                    String[] tokens = p.split("=");
+                    String paramName = tokens[0];
+                    String defaultVal = tokens.length > 1 ? tokens[1] : "";
+                    params.add(paramName);
+                    defaults.put(paramName, defaultVal);
+                } else {
+                    params.add(p);
+                }
+            }
+        }
+
+        return new Object[]{macroName, params, defaults};
+    }
+
+    // Pass 1 - Build MNT and MDT, produce intermediate code
+    public void pass1(List<String> sourceLines) {
+        boolean inMacro = false;
+        String currentMacro = null;
+        int mdtIndex = 0;
+        List<String> paramList = new ArrayList<>();
+        Map<String, String> defaultParams = new LinkedHashMap<>();
+
+        for (String rawLine : sourceLines) {
+            String line = rawLine.trim();
+            if (line.equals("MACRO")) {
+                inMacro = true;
+                continue;
+            }
+
+            if (inMacro) {
+                if (currentMacro == null) {
+                    Object[] parsed = parseMacroHeader(line);
+                    String macroName = (String) parsed[0];
+                    paramList = (List<String>) parsed[1];
+                    defaultParams = (Map<String, String>) parsed[2];
+
+                    MNT.put(macroName, new MNTEntry(mdtIndex, new ArrayList<>(paramList), new LinkedHashMap<>(defaultParams)));
+                    currentMacro = macroName;
+                } else {
+                    String processedLine = line;
+                    for (int i = 0; i < paramList.size(); i++) {
+                        processedLine = processedLine.replace(paramList.get(i), "(P," + i + ")");
+                    }
+                    MDT.add(processedLine);
+                    mdtIndex++;
+
+                    if (processedLine.equals("MEND")) {
+                        inMacro = false;
+                        currentMacro = null;
+                        paramList.clear();
+                        defaultParams.clear();
+                    }
+                }
+            } else {
+                intermediateCode.add(line);
+            }
+        }
+    }
+
+    // Pass 2 - Expand macros
+    public Object[] pass2() {
+        List<String> output = new ArrayList<>();
+        List<Map<String, Map<String, String>>> allALAs = new ArrayList<>();
+
+        for (String line : intermediateCode) {
+            String[] parts = line.trim().split("\\s+", 2);
+            if (parts.length == 0 || parts[0].isEmpty()) {
+                output.add(line);
+                continue;
+            }
+
+            String macroName = parts[0];
+            if (MNT.containsKey(macroName)) {
+                MNTEntry entry = MNT.get(macroName);
+                List<String> formalParams = entry.params;
+                Map<String, String> defaults = entry.defaults;
+
+                String actualParamsStr = (parts.length > 1) ? parts[1].trim() : "";
+                Map<String, String> ALA = new LinkedHashMap<>();
+
+                if (!actualParamsStr.isEmpty()) {
+                    String[] tokens = actualParamsStr.split(",");
+                    int posIndex = 0;
+
+                    for (String tok : tokens) {
+                        tok = tok.trim();
+                        if (tok.contains("=")) {
+                            String[] kv = tok.split("=");
+                            String key = kv[0].trim();
+                            String val = kv.length > 1 ? kv[1].trim() : "";
+                            if (!key.startsWith("&")) key = "&" + key;
+                            ALA.put(key, val);
+                        } else if (posIndex < formalParams.size()) {
+                            ALA.put(formalParams.get(posIndex), tok);
+                            posIndex++;
+                        }
+                    }
+                }
+
+                // Fill missing params with defaults
+                for (String p : formalParams) {
+                    ALA.putIfAbsent(p, defaults.getOrDefault(p, ""));
+                }
+
+                Map<String, Map<String, String>> invocationALA = new LinkedHashMap<>();
+                invocationALA.put(macroName, new LinkedHashMap<>(ALA));
+                allALAs.add(invocationALA);
+
+                int i = entry.mdtIndex;
+                while (i < MDT.size()) {
+                    String mdtLine = MDT.get(i);
+                    if (mdtLine.equals("MEND")) break;
+
+                    String expandedLine = mdtLine;
+                    for (int idx = 0; idx < formalParams.size(); idx++) {
+                        expandedLine = expandedLine.replace("(P," + idx + ")", ALA.get(formalParams.get(idx)));
+                    }
+                    output.add(expandedLine);
+                    i++;
+                }
+
+            } else {
+                output.add(line);
+            }
+        }
+
+        return new Object[]{output, allALAs};
+    }
+
+    // Utility: Write to file
+    private static void writeToFile(String filename, List<String> lines) throws IOException {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(filename))) {
+            for (String line : lines) {
+                bw.write(line);
+                bw.newLine();
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        List<String> sourceProgram = Arrays.asList(
+            "MACRO",
+            "INCR_D  &MEM_VAL, &INCR_VAL=, &REG=AREG",
+            "MOVER &REG, &MEM_VAL",
+            "ADD &REG, &INCR_VAL",
+            "MOVEM &REG, &MEM_VAL",
+            "MEND",
+            "START 200",
+            "DS A 1",
+            "DC B 1",
+            "INCR_D A, INCR_VAL=B, REG=BREG",
+            "INCR_D A, INCR_VAL=B",
+            "PRINT A",
+            "END 202"
+        );
+
+        MacroProcessor mp = new MacroProcessor();
+        mp.pass1(sourceProgram);
+
+        // Write MNT
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter("mnt.txt"))) {
+            bw.write("=== MNT (Macro Name Table) ===\n");
+            for (Map.Entry<String, MNTEntry> e : mp.MNT.entrySet()) {
+                bw.write(e.getKey() + ":\n");
+                bw.write("  MDT index: " + e.getValue().mdtIndex + "\n");
+                bw.write("  Params: " + e.getValue().params + "\n");
+                bw.write("  Defaults: " + e.getValue().defaults + "\n\n");
+            }
+        }
+
+        // Write MDT
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter("mdt.txt"))) {
+            bw.write("=== MDT (Macro Definition Table) ===\n");
+            for (int i = 0; i < mp.MDT.size(); i++) {
+                bw.write(i + ": " + mp.MDT.get(i) + "\n");
+            }
+            bw.newLine();
+        }
+
+        // Write Intermediate Code
+        writeToFile("intermediate_code.txt", mp.intermediateCode);
+
+        // Pass 2
+        Object[] pass2Result = mp.pass2();
+        List<String> expandedCode = (List<String>) pass2Result[0];
+        List<Map<String, Map<String, String>>> allALAs = (List<Map<String, Map<String, String>>>) pass2Result[1];
+
+        // Write ALAs
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter("alas.txt"))) {
+            bw.write("=== ALAs for each Macro Invocation ===\n");
+            int idx = 1;
+            for (Map<String, Map<String, String>> ala : allALAs) {
+                bw.write("Invocation " + idx++ + ": " + ala + "\n");
+            }
+        }
+
+        // Write Expanded Code
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter("expanded_code.txt"))) {
+            bw.write("=== Expanded Code (Pass-II Output) ===\n");
+            for (String line : expandedCode) {
+                bw.write(line);
+                bw.newLine();
+            }
+        }
+
+        System.out.println("Macro processing complete. Output files generated.");
+    }
+}
