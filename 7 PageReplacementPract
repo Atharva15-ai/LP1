@@ -1,0 +1,123 @@
+package prac7;
+import java.util.*; 
+class PageReplacement { 
+    static void fifo(int pages[], int capacity) { 
+        Set<Integer> memory = new HashSet<>(); 
+        Queue<Integer> fifoQueue = new LinkedList<>(); 
+        int pageFaults = 0, pageHits = 0; 
+        for (int page : pages) { 
+            if (!memory.contains(page)) { 
+                if (memory.size() == capacity) { 
+                    int oldest = fifoQueue.poll(); 
+                    memory.remove(oldest); 
+                } 
+                memory.add(page); 
+                fifoQueue.add(page); 
+                pageFaults++; 
+            } else { 
+                pageHits++; 
+            } 
+            System.out.println("FIFO Memory State: " + fifoQueue); 
+        } 
+        double hitRatio = (double) pageHits / pages.length; 
+        double faultRatio = (double) pageFaults / pages.length; 
+        System.out.println("FIFO Page Faults: " + pageFaults); 
+        System.out.println("FIFO Page Hits: " + pageHits); 
+        System.out.printf("FIFO Page Hit Ratio: %.2f\n", hitRatio); 
+        System.out.printf("FIFO Page Fault Ratio: %.2f\n\n", faultRatio); 
+    } 
+    static void lru(int pages[], int capacity) { 
+        Set<Integer> memory = new HashSet<>(); 
+        Map<Integer, Integer> indexes = new HashMap<>(); 
+        int pageFaults = 0, pageHits = 0; 
+        for (int i = 0; i < pages.length; i++) { 
+            int page = pages[i]; 
+            if (!memory.contains(page)) { 
+                if (memory.size() == capacity) { 
+                    int lruPage = Collections.min(indexes.entrySet(), 
+Map.Entry.comparingByValue()).getKey(); 
+                    memory.remove(lruPage); 
+                    indexes.remove(lruPage); 
+                } 
+                memory.add(page); 
+                pageFaults++; 
+            } else { 
+                pageHits++; 
+            } 
+            indexes.put(page, i); 
+            System.out.println("LRU Memory State: " + memory); 
+        } 
+        double hitRatio = (double) pageHits / pages.length; 
+        double faultRatio = (double) pageFaults / pages.length; 
+        System.out.println("LRU Page Faults: " + pageFaults); 
+        System.out.println("LRU Page Hits: " + pageHits); 
+        System.out.printf("LRU Page Hit Ratio: %.2f\n", hitRatio); 
+        System.out.printf("LRU Page Fault Ratio: %.2f\n\n", faultRatio); 
+    } 
+    static void optimal(int pages[], int capacity) { 
+        Set<Integer> memory = new HashSet<>(); 
+        int pageFaults = 0, pageHits = 0; 
+        for (int i = 0; i < pages.length; i++) { 
+            int page = pages[i]; 
+            if (!memory.contains(page)) { 
+                if (memory.size() == capacity) { 
+                    int farthest = -1, pageToReplace = -1; 
+                    for (int memPage : memory) { 
+                        int j; 
+                        for (j = i + 1; j < pages.length; j++) { 
+                            if (pages[j] == memPage) break; 
+                        } 
+                        if (j == pages.length) { 
+                            pageToReplace = memPage; 
+                            break; 
+                        } 
+                        if (j > farthest) { 
+                            farthest = j; 
+                            pageToReplace = memPage; 
+                        } 
+                    } 
+                    memory.remove(pageToReplace); 
+                } 
+                memory.add(page); 
+                pageFaults++; 
+            } else { 
+                pageHits++; 
+            } 
+            System.out.println("Optimal Memory State: " + memory); 
+        } 
+ 
+        double hitRatio = (double) pageHits / pages.length; 
+        double faultRatio = (double) pageFaults / pages.length; 
+ 
+        System.out.println("Optimal Page Faults: " + pageFaults); 
+        System.out.println("Optimal Page Hits: " + pageHits); 
+        System.out.printf("Optimal Page Hit Ratio: %.2f\n", hitRatio); 
+        System.out.printf("Optimal Page Fault Ratio: %.2f\n\n", faultRatio); 
+    } 
+ 
+    public static void main(String[] args) { 
+        Scanner sc = new Scanner(System.in); 
+ 
+        System.out.print("Enter number of pages: "); 
+        int n = sc.nextInt(); 
+        int[] pages = new int[n]; 
+        System.out.println("Enter page reference string:"); 
+        for (int i = 0; i < n; i++) { 
+            pages[i] = sc.nextInt(); 
+        } 
+ 
+        System.out.print("Enter number of frames: "); 
+        int capacity = sc.nextInt(); 
+ 
+        System.out.println("\n--- FIFO Page Replacement ---"); 
+        fifo(pages, capacity); 
+ 
+        System.out.println("--- LRU Page Replacement ---"); 
+        lru(pages, capacity); 
+ 
+        System.out.println("--- Optimal Page Replacement ---"); 
+        optimal(pages, capacity); 
+ 
+        sc.close(); 
+    } 
+}
