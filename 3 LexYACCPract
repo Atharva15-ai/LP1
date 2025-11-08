@@ -55,3 +55,8 @@ public class Hello {
     System.out.println(a);
 }
 
+Commands to run:
+lex javalex.l
+gcc lex.yy.c -o javalex
+./javalex test.java
+
